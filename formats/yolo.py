@@ -1,6 +1,8 @@
 import os
 import json
 import glob
+import random
+
 import cv2
 
 
@@ -113,3 +115,25 @@ class YOLO_converter(object):
                         else:
                             f.write('{} '.format(item))
                 print('hold')
+
+    def split_set(self, train_sz=2500):
+        random.seed(20)
+        all_files = os.path.join(self.root_path, 'train.txt')
+        with open(all_files, 'r') as f:
+            all_paths = f.readlines()
+            print('hold')
+        rand_idx = list(range(0, len(all_paths)))
+        random.shuffle(rand_idx)
+
+        with open('new_train.txt', 'w') as f:
+            c = 0
+            for idx in rand_idx:
+                f.write('{}'.format(all_paths[idx]))
+                c = c+1
+                if c == train_sz:
+                    break
+
+        with open('valid.txt', 'w') as f:
+            for idx in range(train_sz, len(all_paths)):
+                f.write('{}'.format(all_paths[rand_idx[idx]]))
+
