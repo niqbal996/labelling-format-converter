@@ -61,32 +61,36 @@ class YOLO_converter(object):
                             file.write("{} ".format(item))
                             c+=1
 
-    def split_data_by_resolution(self):
-        image_path = os.path.join(self.root_path, 'obj_train_data', '*.png')
-        data_folder = os.path.join('./obj_train_data')
-        image_list = glob.glob(image_path)
-        image_subset1 = []
-        image_subset2 = []
-        for image_path in image_list:
-            image = cv2.imread(image_path)
-            if image.shape[0:2] == (720, 1280): # Filter by resolution 1280 x 720
-                # print(image.shape[0:2])
-                image_subset_path = os.path.join(data_folder, os.path.basename(image_path))
-                image_subset1.append(image_subset_path)
-            else:                               # Filter by other resolution atm 640 x 480
-                # print(image.shape[0:2])
-                image_subset_path = os.path.join(data_folder, os.path.basename(image_path))
-                image_subset2.append(image_subset_path)
+    # def split_data_by_resolution(self, paths):
+    #     # image_path = os.path.join(self.root_path, 'obj_train_data', '*.png')
+    #     # data_folder = os.path.join('./obj_train_data')
+    #     image_list = glob.glob(paths)
+    #     image_subset1 = []
+    #     image_subset2 = []
+    #     for image_path in image_list:
+    #         image = cv2.imread(image_path)
+    #         if image.shape[0:2] == (720, 1280): # Filter by resolution 1280 x 720
+    #             # print(image.shape[0:2])
+    #             image_subset_path = os.path.join(data_folder, os.path.basename(image_path))
+    #             image_subset1.append(image_subset_path)
+    #         else:                               # Filter by other resolution atm 640 x 480
+    #             # print(image.shape[0:2])
+    #             image_subset_path = os.path.join(data_folder, os.path.basename(image_path))
+    #             image_subset2.append(image_subset_path)
 
-        with open(os.path.join(self.root_path, 'val_res1.txt'), 'w') as file:
-            for item in image_subset1:
-                file.write("{}\n".format(item))
+    #     # with open(os.path.join(self.root_path, 'val_res1.txt'), 'w') as file:
+    #     #     for item in image_subset1:
+    #     #         file.write("{}\n".format(item))
 
-        with open(os.path.join(self.root_path, 'val_res2.txt'), 'w') as file:
-            for item in image_subset2:
-                file.write("{}\n".format(item))
+    #     # with open(os.path.join(self.root_path, 'val_res2.txt'), 'w') as file:
+    #     #     for item in image_subset2:
+    #     #         file.write("{}\n".format(item))
 
-        print('[INFO] Created new validation splits based on resolutions present in the dataset \n with {} and {} entries in each file'.format(len(image_subset1), len(image_subset2)))
+    #     print('[INFO] Created new validation splits based on resolutions present in the dataset \n with {} and {} entries in each file'.format(len(image_subset1), len(image_subset2)))
+
+    def adjust_splits(self, paths, split='train'):
+        image_paths = os.path.join(self.root1, paths)
+        print('hold')
 
     def fix_labels(self):
         label_path = os.path.join(self.root_path, 'obj_train_data', '*.txt')
@@ -137,3 +141,89 @@ class YOLO_converter(object):
             for idx in range(train_sz, len(all_paths)):
                 f.write('{}'.format(all_paths[rand_idx[idx]]))
 
+    def write_split_file(self, files, root_path, name='test.txt'):
+        with open(os.path.join(root_path, '{}'.format(name)), 'w') as file:
+            for file in files:
+                file.write("{}".format(file))
+
+    def remove_empty(self, list_of_files, root_path):
+        with_labels = []
+        without_labels = []
+        for file in list_of_files:
+            if file[0] == '/':
+                path_ = os.path.join(root_path, file[1:-4]+'txt')
+            else:
+                path_ = os.path.join(root_path, file[0:-4]+'txt')
+            with open(path_, 'r') as f:
+                boxes = f.readlines()
+            if len(boxes) > 0: 
+                with_labels.append(file)
+            else:
+                without_labels.append(file)
+        print('[INFO] Kept {} files with labels!'.format(len(with_labels)))
+        print('[INFO] Kept {} files without any labels!'.format(len(without_labels)))   
+        print('[INFO] TOTAL =======> {} + {} = {}'.format(len(with_labels), 
+        len(without_labels), 
+        len(with_labels)+len(without_labels)))     
+
+        return with_labels, without_labels
+
+    def keep_labels_with_more_entries(self, files):
+        full_paths_1 = [os.path.join(self.root1, 'obj_train_data', 'top_down_maize_filtered', i) for i in files]
+        full_paths_2 = [os.path.join(self.root2, 'obj_train_data', 'top_down_maize', i) for i in files]
+
+        keep = []
+        for item1, item2 in zip(full_paths_1, full_paths_2):
+            with open(item1[:-4]+'txt', 'r') as f:
+                labels1 = f.readlines()
+            with open(item2[:-4]+'txt', 'r') as f:
+                labels2 = f.readlines()
+
+            if labels1 > labels2:
+                keep.append(item1)
+            else:
+                keep.append(item2)
+
+        return keep
+    
+    def merge(self, p1, p2):
+        self.root1 = p1
+        self.root2 = p2
+        files1 = os.path.join(p1, 'train.txt')
+        files2 = os.path.join(p2, 'train.txt')
+        with open(files1, 'r') as f:
+            labels1 = f.readlines()
+            print(len(labels1))
+        with open(files2, 'r') as f:
+            labels2 = f.readlines()
+            print(len(labels2))
+        # combi = labels1 + labels2
+
+        label_split1, unlabelled_split1 = self.remove_empty(labels1, p1)
+        label_split2, unlabelled_split2 = self.remove_empty(labels2, p2)
+
+        label_split1 = [os.path.basename(i) for i in label_split1]
+        label_split2 = [os.path.basename(i) for i in label_split2]
+        unlabelled_split1 = [os.path.basename(i) for i in unlabelled_split1]
+        unlabelled_split2 = [os.path.basename(i) for i in unlabelled_split2]
+        tmp1 = set(label_split1)
+        tmp2 = set(label_split2)
+        common = tmp2 & tmp1 
+        common_tmp = self.keep_labels_with_more_entries(list(common))
+        tmpxx = tmp1 - common
+        tmpyy = tmp2 - common
+
+
+        combi = list(tmpxx) + list(tmpyy) 
+
+        # all_labelled = label_split1 + label_split2
+        # all_unlabelled = unlabelled_split1 + unlabelled_split2
+
+        # self.write_split_file(files=all_labelled, root_path=p1, name='train.txt')
+        self.adjust_splits(label_split1, p1, split='train')
+
+        self.write_split_file(files=all_unlabelled, root_path=p1, name='test.txt')
+        self.write_split_file(files=all_labelled, root_path=p1, name='valid.txt')
+
+
+        print('hold')
