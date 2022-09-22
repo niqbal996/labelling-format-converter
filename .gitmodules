@@ -1,0 +1,3 @@
+[submodule "Scientific-Project"]
+	path = Scientific-Project
+	url = git@github.com:inakivelasco/Scientific-Project.git
