@@ -1,8 +1,8 @@
 import os
-import json
 import glob
 import random
-
+import shutil
+import imagesize
 import cv2
 
 
@@ -88,9 +88,37 @@ class YOLO_converter(object):
 
     #     print('[INFO] Created new validation splits based on resolutions present in the dataset \n with {} and {} entries in each file'.format(len(image_subset1), len(image_subset2)))
 
-    def adjust_splits(self, paths, split='train'):
-        image_paths = os.path.join(self.root1, paths)
-        print('hold')
+    def make_splits(self, files, ratio=0.8):
+
+        res1 = []
+        res2 = []
+        for file in files:
+            if file[-1:] == '\n':
+                img_path = os.path.join(self.combi_path, file)[:-1]
+            else:
+                img_path = os.path.join(self.combi_path, file)
+               # image = cv2.imread(img_path)
+            # reso = image.shape[0:2]
+            reso = imagesize.get(img_path)
+            if reso == (640, 480):
+                res1.append(file)
+            else:
+                assert reso == (1280, 720)
+                res2.append(file)
+        res1.sort()
+        res2.sort()
+        factor = round(1 / (1 - ratio)) 
+        len_res1 = round(len(res1) / factor)
+        len_res2 = round(len(res2) / factor)
+        valid = res1[0: round(len_res1/2)] + res1[-round(len_res1/2):-1]    # extract half from both ends
+        valid = valid + res2[0: round(len_res2/2)] + res2[-round(len_res2/2):-1]
+
+        valid = set(valid)
+        train = list(set(res1 + res2) - valid)
+        valid = list(valid)
+
+        print('[INFO] Dataset has been divided into TRAIN={} and VALIDATION={} splits'.format(len(train), len(valid)))
+        return train, valid
 
     def fix_labels(self):
         label_path = os.path.join(self.root_path, 'obj_train_data', '*.txt')
@@ -142,9 +170,9 @@ class YOLO_converter(object):
                 f.write('{}'.format(all_paths[rand_idx[idx]]))
 
     def write_split_file(self, files, root_path, name='test.txt'):
-        with open(os.path.join(root_path, '{}'.format(name)), 'w') as file:
-            for file in files:
-                file.write("{}".format(file))
+        with open(os.path.join(root_path, name), 'w') as f:
+            for item in files:
+                f.write("{}".format(item))
 
     def remove_empty(self, list_of_files, root_path):
         with_labels = []
@@ -178,13 +206,51 @@ class YOLO_converter(object):
                 labels1 = f.readlines()
             with open(item2[:-4]+'txt', 'r') as f:
                 labels2 = f.readlines()
-
+            assert len(labels1) != 0
+            assert len(labels2) != 0
             if labels1 > labels2:
                 keep.append(item1)
             else:
                 keep.append(item2)
+        
+        print('[INFO] Copying files from the source to target new combined dataset path')
+        new_paths = []
+        for file in keep:
+            name = file[:-4]
+            shutil.copy(name+'txt', os.path.join(self.combi_path))
+            shutil.copy(name+'png', os.path.join(self.combi_path))
+            new_paths.append(os.path.join(self.combi_path, os.path.basename(name)+'png'))
 
-        return keep
+        return new_paths
+
+    def copy_unlabelled_files_to_dest(self, files1, files2, common):
+        full_paths_1 = [os.path.join(self.root1, 'obj_train_data', 'top_down_maize_filtered', i) for i in files1]
+        full_paths_2 = [os.path.join(self.root2, 'obj_train_data', 'top_down_maize', i) for i in files2]
+        full_paths_common = [os.path.join(self.root2, 'obj_train_data', 'top_down_maize', i) for i in common]
+
+        for file in full_paths_1:
+            shutil.copy(file[:-1], '/home/naeem/combi/testing')
+
+        for file in full_paths_2:
+            shutil.copy(file[:-1], '/home/naeem/combi/testing')
+
+        for file in full_paths_common:
+            shutil.copy(file[:-1], '/home/naeem/combi/testing')
+
+        print('[INFO] Copied all unlabelled files to the target folder')
+
+    def copy_labelled_files_to_dest(self, files1, files2, dest):
+        full_paths_1 = [os.path.join(self.root1, 'obj_train_data', 'top_down_maize_filtered', i) for i in files1]
+        full_paths_2 = [os.path.join(self.root2, 'obj_train_data', 'top_down_maize', i) for i in files2]
+
+        for file in full_paths_1:
+            shutil.copy(file[:-4]+'txt', dest)
+            shutil.copy(file[:-4]+'png', dest)
+        
+        for file in full_paths_2:
+            shutil.copy(file[:-4]+'txt', dest)
+            shutil.copy(file[:-4]+'png', dest)
+
     
     def merge(self, p1, p2):
         self.root1 = p1
@@ -193,10 +259,10 @@ class YOLO_converter(object):
         files2 = os.path.join(p2, 'train.txt')
         with open(files1, 'r') as f:
             labels1 = f.readlines()
-            print(len(labels1))
+            print('[INFO] Found {} number of images and labels'.format(len(labels1)))
         with open(files2, 'r') as f:
             labels2 = f.readlines()
-            print(len(labels2))
+            print('[INFO] Found {} number of images and labels'.format(len(labels2)))
         # combi = labels1 + labels2
 
         label_split1, unlabelled_split1 = self.remove_empty(labels1, p1)
@@ -208,22 +274,49 @@ class YOLO_converter(object):
         unlabelled_split2 = [os.path.basename(i) for i in unlabelled_split2]
         tmp1 = set(label_split1)
         tmp2 = set(label_split2)
+
+        # Process the images and labels common across two tasks and create a new cleaned dataset
         common = tmp2 & tmp1 
-        common_tmp = self.keep_labels_with_more_entries(list(common))
+        self.combi_path = '/home/naeem/combi/data/'
+        new_common_paths = self.keep_labels_with_more_entries(list(common))
+
         tmpxx = tmp1 - common
         tmpyy = tmp2 - common
 
+        combi_unique = list(tmpxx) + list(tmpyy) 
 
-        combi = list(tmpxx) + list(tmpyy) 
+        tmp1 = set(unlabelled_split1)
+        tmp2 = set(unlabelled_split2)
+        unlabelled_common = tmp1 & tmp2
+        tmp1 = tmp1 - unlabelled_common
+        tmp2 = tmp2 - unlabelled_common
+        # convert back to lists
+        tmp1, tmp2, unlabelled_common = list(tmp1), list(tmp2), list(unlabelled_common)
+        # unlabelled_unique = list(tmp1) + list(tmp2)
+        self.copy_unlabelled_files_to_dest(tmp1, tmp2, unlabelled_common)
+        self.copy_labelled_files_to_dest(tmpxx, tmpyy, self.combi_path)
 
-        # all_labelled = label_split1 + label_split2
-        # all_unlabelled = unlabelled_split1 + unlabelled_split2
+        train, valid = self.make_splits(combi_unique+list(common))
 
-        # self.write_split_file(files=all_labelled, root_path=p1, name='train.txt')
-        self.adjust_splits(label_split1, p1, split='train')
+        # append root directory path to the filenames
 
-        self.write_split_file(files=all_unlabelled, root_path=p1, name='test.txt')
-        self.write_split_file(files=all_labelled, root_path=p1, name='valid.txt')
+        train = [os.path.join('./data/', file) for file in train]
+        valid = [os.path.join('./data/', file) for file in valid]
+        test = tmp1 + tmp2 + unlabelled_common
+        test = [os.path.join('./testing/', file) for file in test]
+        train.sort()
+        valid.sort()
+        test.sort()
+        self.write_split_file(train, '/home/naeem/combi/', 'train_sorted.txt')
+        self.write_split_file(valid, '/home/naeem/combi/', 'valid_sorted.txt')
+        self.write_split_file(test, '/home/naeem/combi/', 'test_sorted.txt')
 
+        random.seed(20)
+        random.shuffle(train)
+        random.shuffle(valid)
+        random.shuffle(test)
+        self.write_split_file(train, '/home/naeem/combi/', 'train.txt')
+        self.write_split_file(valid, '/home/naeem/combi/', 'valid.txt')
+        self.write_split_file(test, '/home/naeem/combi/', 'test.txt')
 
-        print('hold')
+        print('[INFO] Merged the two datasets and created new train, valid and test YOLO formatted files.')
