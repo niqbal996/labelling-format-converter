@@ -5,10 +5,10 @@ import glob
 from posixpath import splitdrive
 import imagesize
 import cv2, json, random, os, PIL
-# from detectron2.data import MetadataCatalog
-# from detectron2.utils.visualizer import Visualizer
-# from detectron2.data.catalog import DatasetCatalog
-# from detectron2.data.datasets import register_coco_instances
+from detectron2.data import MetadataCatalog
+from detectron2.utils.visualizer import Visualizer
+from detectron2.data.catalog import DatasetCatalog
+from detectron2.data.datasets import register_coco_instances
 
 class CoCo_converter(object):
     def __init__(self, root_path='/media/naeem/T7/datasets/Corn_syn_dataset/',
@@ -46,7 +46,7 @@ class CoCo_converter(object):
 
             imagesDir = os.path.join(rootDir, 'data')
             ogAnnsDir = os.path.join(rootDir, 'data')
-            cocoAnnsDir = os.path.join(rootDir, 'coco_annotations')
+            cocoAnnsDir = os.path.join(rootDir, 'coco_anns')
             os.makedirs(cocoAnnsDir, exist_ok=True)
             yoloAnns = os.path.join(rootDir, split)
             with open(yoloAnns, 'r') as f:
@@ -70,14 +70,18 @@ class CoCo_converter(object):
             annsId = 0
             cat_id = 0
             for filename in files:
-                if split=='train.txt':
+                if split=='train_mini.txt':
                     imageId = files.index(filename) # Unique from validation split
-                elif split=='valid.txt':
-                    imageId = files.index(filename) + 2862 # size of train split hard coded for now.
+                elif split =='valid.txt':
+                    imageId = files.index(filename) # size of train split hard coded for now.
                 else:
-                    print('[ERROR] Image ID not specified.')
-                    sys.exit(-1)
-                width, height = imagesize.get(os.path.join(imagesDir, os.path.basename(filename)[:-1]))
+                    imageId = files.index(filename)
+                    # print('[ERROR] Image ID not specified.')
+                    # sys.exit(-1)
+                try:
+                    width, height = imagesize.get(os.path.join(imagesDir, os.path.basename(filename)[:-1]))
+                except:
+                    width, height = imagesize.get(os.path.join(imagesDir, os.path.basename(filename)))
                 cocoAnns['images'].append({'license': 1,
                                         'file_name': os.path.basename(filename)[:-1],
                                         'coco_url': 'None',
@@ -86,8 +90,11 @@ class CoCo_converter(object):
                                         'date_captured': 'None',
                                         'flickr_url': 'None',
                                         'id': imageId})
-
-                with open(os.path.join(ogAnnsDir, os.path.basename(filename)[:-4]+'txt'), 'r') as f:
+                if os.path.exists(os.path.join(ogAnnsDir, os.path.basename(filename)[:-4]+'txt')):
+                    file = os.path.join(ogAnnsDir, os.path.basename(filename)[:-4] + 'txt')
+                else:
+                    file = os.path.join(ogAnnsDir, os.path.basename(filename)[:-4] + '.txt')
+                with open(file, 'r') as f:
                     for line in f.readlines():
                         newBbox = [float(i) for i in line[:-1].split(' ')[1:]]
                         newBbox[0] *= width
@@ -97,25 +104,26 @@ class CoCo_converter(object):
                         newBbox[0] = newBbox[0] - newBbox[2] / 2
                         newBbox[1] = newBbox[1] - newBbox[3] / 2
                         newBbox = [round(i, 2) for i in newBbox]
-                        if int(float(line.split(' ')[0])) == 0:
-                            cat_id = 1
-                        elif int(float(line.split(' ')[0])) == 1:
-                            cat_id = 2
-                        else:
-                            cat_id = 0
-                            continue #skip bark ID
+                        # if int(float(line.split(' ')[0])) == 0:
+                        #     cat_id = 2
+                        # elif int(float(line.split(' ')[0])) == 1:
+                        #     cat_id = 1
+                        # elif int(float(line.split(' ')[0])) == 2:
+                        #     continue #skip bark ID
                         cocoAnns['annotations'].append({'segmentation': [],
                                                     'area': newBbox[2] * newBbox[3],
                                                     'iscrowd': 0,
                                                     'image_id': imageId,
                                                     'bbox': newBbox,
-                                                    'category_id': cat_id,
+                                                    'category_id': int(float(line.split(' ')[0])) + 1,
                                                     'id': annsId})
                         annsId += 1
-            with open(os.path.join(cocoAnnsDir, '{}_2022.json'.format(os.path.splitext(split)[0])), 'w+') as f:
+            with open(os.path.join(cocoAnnsDir, '{}_new_2022.json'.format(os.path.splitext(split)[0])), 'w+') as f:
                 json.dump(cocoAnns, f)
 
-            # register_coco_instances("new_dataset", {}, os.path.join(cocoAnnsDir, f'{datasetName}NewAnnotations.json'), imagesDir)
+            # register_coco_instances("new_dataset", {},
+            #                         os.path.join(cocoAnnsDir, '{}_new_2022.json'.format(os.path.splitext(split)[0])),
+            #                         imagesDir)
             # my_dataset_metadata = MetadataCatalog.get("new_dataset")
             # dataset_dicts = DatasetCatalog.get("new_dataset")
 

@@ -9,6 +9,15 @@
             "type": "python",
             "request": "launch",
             "program": "/home/naeem/git/labelling-format-converter/main.py",
+            "args": ["--output", "coco", "--root-folder", "/home/naeem/datasets/maize_syn/"],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "toCOCO",
+            "type": "python",
+            "request": "launch",
+            "program": "/home/naeem/git/labelling-format-converter/Scientific-Project/utils/convert2COCO.py",
             "console": "integratedTerminal",
             "justMyCode": true
         }

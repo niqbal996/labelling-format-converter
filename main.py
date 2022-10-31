@@ -16,12 +16,15 @@ def main():
     if flags.output == 'coco':
         from formats.coco import CoCo_converter
         format = CoCo_converter(root_path=flags.root_folder, subset=False)
+        format.YOLO2COCO(rootDir=flags.root_folder, split='train_mini.txt')
         format.read_box_labels()
     if flags.output == 'yolo':
         from formats.yolo import YOLO_converter
+        # format1 = YOLO_converter(root_path=flags.root_folder, subset=False, remove_class_id=3)
         format = YOLO_converter(root_path=flags.root_folder, subset=False, remove_class_id=3)
         # format.read_box_labels()
         # format.split_data_by_resolution()
+        # format.merge(p1, p2)
         format.fix_labels()
 
 if __name__ == '__main__':
