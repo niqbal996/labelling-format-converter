@@ -2,14 +2,10 @@ import os
 import glob
 import argparse
 
-
-# root = "/media/naeem/T7/datasets/Corn_syn_dataset/"
-# root = "/media/naeem/T7/datasets/Corn_syn_dataset/"
-root = '/media/naeem/T7/datasets/Maize_dataset_backup'
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--root-folder', type=str, default='/media/naeem/T7/datasets/Corn_syn_dataset/', help='simulation output root folder path')
-    parser.add_argument('--output', type=str, default='yolo', choices=['coco', 'yolo'], help='output labelling format')
+    parser.add_argument('--root-folder', type=str, default='/mnt/d/datasets/Corn_syn_dataset/2022_GIL_Paper_Dataset_V2', help='simulation output root folder path')
+    parser.add_argument('--output', type=str, default='yolo', choices=['coco', 'yolo', 'coco_seg'], help='output labelling format')
 
     flags = parser.parse_args()
 
@@ -26,6 +22,13 @@ def main():
         # format.split_data_by_resolution()
         # format.merge(p1, p2)
         format.fix_labels()
+    if flags.output == 'coco_seg':
+        from formats.coco_seg import COCO_Instance_segmentation
+        format = COCO_Instance_segmentation(root_path=flags.root_folder)
+        format.toCOCO()
+        format.save_json(anns_dir='/mnt/d/datasets/Corn_syn_dataset/2022_GIL_Paper_Dataset_V2/coco_annotations',
+                         anns_file='corn_synth_23_train.json')
+        format.visualize_coco()
 
 if __name__ == '__main__':
     main()
