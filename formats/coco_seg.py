@@ -21,6 +21,8 @@ class COCO_Instance_segmentation(object):
         self.boxes = None
         self.image_root = join(self.root_path, 'camera_main_camera', 'rect')
         self.source_folder = join(self.root_path, 'camera_main_camera_annotations', 'instance_segmentation')
+        self.source_seg_folder = join(self.root_path, 'camera_main_camera_annotations', 'semantic_segmentation')
+        self.source_boxes = join(self.root_path, 'camera_main_camera_annotations', 'bounding_box')
         self.new_Anns = {}
         self.new_Anns['info'] = {
                         'description': f'Synthetic dataset v2.0',
@@ -32,9 +34,10 @@ class COCO_Instance_segmentation(object):
 
         self.new_Anns['licenses'] = [{'url': 'None', 'id': 1, 'name': 'None'}]
 
-        self.new_Anns['categories'] = [{'supercategory': 'plants', 'id': 1, 'name': 'weed'},
-                                {'supercategory': 'plants', 'id': 2, 'name': 'maize'},
-                                {'supercategory': 'residue', 'id': 3, 'name': 'bark'}]
+        self.new_Anns['categories'] = [{'supercategory': 'plants', 'id': 1, 'name': 'maize'},
+                                {'supercategory': 'plants', 'id': 2, 'name': 'weed'},
+                                # {'supercategory': 'residue', 'id': 3, 'name': 'bark'}
+                                ]
 
         self.new_Anns['images'] = []
         self.new_Anns['annotations'] = []    
@@ -42,10 +45,15 @@ class COCO_Instance_segmentation(object):
     def mask2polygons(self, image_filename):
         # Get the source label file name
         file = join(self.source_folder, '{}.npz'.format(basename(image_filename)[:-4]))
+        seg_file = join(self.source_seg_folder, '{}.npz'.format(basename(image_filename)[:-4]))
         label_image = np.zeros((1536, 2048), dtype=np.uint8)
         labels = [i  for i in reversed(range(255))]
         numpy_data = np.load(file)
+        seg_data = np.load(seg_file)
         img = np.array(numpy_data.f.array)
+        seg_img = np.array(seg_data.f.array)
+        # unique classes
+        class_id, _ = np.unique(seg_img, return_counts=True)
         # unique indices
         instance_values, counts = np.unique(img, return_counts=True)
         # # background value
@@ -60,15 +68,25 @@ class COCO_Instance_segmentation(object):
         all_segmentations = []
         all_boxes = []
         all_areas = []
+        all_ids = []    # class IDs
         for value in instance_values:
             label_image = np.zeros((1536, 2048), dtype=np.uint8)
             label_image[np.where(img == value)] = labels[instance_count]
+            # fetch class ID from the segmentation mask
+            id_mask = seg_img[np.where(img==value)]
+            val, counts = np.unique(id_mask, return_counts=True)
+            ind = np.argmax(counts)
+            id = int(val[ind])
+            if id == 2 or id == 3:  # Merge class ID 2 and 3, single and grouped instances are all labelled as weeds
+                id = 2
+            # fill small holes in masks 
             kernel = np.ones((4,4), np.uint8)
             dilated_img = cv2.dilate(label_image, kernel, iterations=2)
             color_tmp = np.repeat(label_image[:, :, np.newaxis], 3, axis=2)
             contours, _ = cv2.findContours(dilated_img, cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
-            contours = np.vstack(contours)              # TODO use all contours as list of polygons for disconnected polygons for same object
+            contours = np.vstack(contours)              # TODO better contour merging. This one leaves artifacts. 
             approx = cv2.approxPolyDP(contours, 0.002 * cv2.arcLength(contours, True), True).astype(float)
+            # approx = cv2.approxPolyDP(contours[0], 0.002 * cv2.arcLength(contours[0], True), True).astype(float)
             for cnt in contours:
                 segmentation = []
                 for point in range(approx.shape[0]):
@@ -81,12 +99,13 @@ class COCO_Instance_segmentation(object):
             all_segmentations.append(segmentation)
             all_boxes.append([x,y,w,h])
             all_areas.append(area)
+            all_ids.append(id)
             # self.show_image(dilated_img, 'instance mask')
             # label_image_color = np.repeat(label_image[:, :, np.newaxis], 3, axis=2)
         # self.show_image(label_image_color, 'full_mask')
 
-        return [all_segmentations], all_boxes, all_areas
-    
+        return all_segmentations, all_boxes, all_areas, all_ids
+
     def show_image(self, img, window_name):
         cv2.namedWindow("window_name", cv2.WINDOW_NORMAL)
         cv2.moveWindow("window_name", 40,30)
@@ -106,24 +125,24 @@ class COCO_Instance_segmentation(object):
             img_data = cv2.imread(imageFile)
             width, height = img_data.shape[1], img_data.shape[0]
             self.new_Anns['images'].append({'license': 1,
-                                    'file_name': imageFile,
+                                    'file_name': basename(imageFile),
                                     'coco_url': 'None',
                                     'height': height,
                                     'width': width,
                                     'date_captured': 'None',
                                     'flickr_url': 'None',
                                     'id': imageId})
-            segmentations, bboxes, areas = self.mask2polygons(imageFile)
+            segmentations, bboxes, areas, category_ids = self.mask2polygons(imageFile)
             count +=1
-            # assert len(segmentations) == len(bboxes) == len(areas)
-            for seg, bbox, area in zip(segmentations, bboxes, areas):
+            assert len(segmentations) == len(bboxes) == len(areas) == len(category_ids)
+            for seg, bbox, area, cat_id in zip(segmentations, bboxes, areas, category_ids):
                 self.new_Anns['annotations'].append({
-                                            'segmentation': seg,
+                                            'segmentation': [seg],
                                             'area': area,
                                             'iscrowd': 0,
                                             'image_id': imageId,
                                             'bbox': bbox,
-                                            'category_id': cat_id,      # TODO dummy category IDs
+                                            'category_id': cat_id,
                                             'id': annsId})
                 annsId += 1
 
