@@ -48,6 +48,7 @@ class COCO_Instance_segmentation(object):
         seg_file = join(self.source_seg_folder, '{}.npz'.format(basename(image_filename)[:-4]))
         label_image = np.zeros((1536, 2048), dtype=np.uint8)
         labels = [i  for i in reversed(range(255))]
+        kernel = np.ones((4,4), np.uint8)
         numpy_data = np.load(file)
         seg_data = np.load(seg_file)
         img = np.array(numpy_data.f.array)
@@ -80,7 +81,6 @@ class COCO_Instance_segmentation(object):
             if id == 2 or id == 3:  # Merge class ID 2 and 3, single and grouped instances are all labelled as weeds
                 id = 2
             # fill small holes in masks 
-            kernel = np.ones((4,4), np.uint8)
             dilated_img = cv2.dilate(label_image, kernel, iterations=2)
             color_tmp = np.repeat(label_image[:, :, np.newaxis], 3, axis=2)
             contours, _ = cv2.findContours(dilated_img, cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
@@ -119,7 +119,7 @@ class COCO_Instance_segmentation(object):
         cat_id = 1
         images = glob(join(self.image_root, '*.png'))
         count = 0 
-        for imageFile in images[0:2]:
+        for imageFile in images:
             imageId = int(basename(imageFile.split('.')[0]))
             print('INFO:::: Processing image number {} / {}'.format(count, len(images)))
             img_data = cv2.imread(imageFile)
@@ -152,6 +152,24 @@ class COCO_Instance_segmentation(object):
         makedirs(anns_dir, exist_ok=True)
         with open(join(anns_dir, anns_file), 'w+') as f:
             json.dump(self.new_Anns, f, default=str)
+
+    def toCityScape(self):
+        mask_folder = join(self.source_seg_folder, 'gtFine')
+        makedirs(mask_folder, exist_ok=True)
+        mask_array = glob(join(self.source_seg_folder, '*.npz'))
+        count = 0
+        for mask in mask_array:
+            mask_data = np.load(mask)
+            mask_numpy_data = mask_data.f.array
+            mask_image = np.zeros_like(mask_numpy_data, dtype=np.uint8)
+            indices = np.unique(mask_numpy_data)
+            for index in indices:
+                if index == 99.0:
+                    pass
+                else:
+                    mask_image[np.where(mask_numpy_data==index)] = int(index)
+            cv2.imwrite(join(mask_folder, basename(mask)[:-4]+'.png'), mask_image)
+            # print('INFO:::: Processing image number {} / {}'.format(count, len(images)))
 
     def visualize_coco(self):
         import random
