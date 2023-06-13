@@ -163,13 +163,17 @@ class COCO_Instance_segmentation(object):
             mask_numpy_data = mask_data.f.array
             mask_image = np.zeros_like(mask_numpy_data, dtype=np.uint8)
             indices = np.unique(mask_numpy_data)
+            # https://github.com/open-mmlab/mmsegmentation/blob/v0.17.0/docs/tutorials/customize_datasets.md
+            # class index has to be between [0, numclasses - 1]            
             for index in indices:
                 if index == 99.0:
                     pass
                 else:
-                    mask_image[np.where(mask_numpy_data==index)] = int(index)
+                    if int(index) == 1:
+                        mask_image[np.where(mask_numpy_data==index)] = 0
+                    elif int(index) == 2 or int(index) == 3:    # merge both weed classes into one 
+                        mask_image[np.where(mask_numpy_data==index)] = 1
             cv2.imwrite(join(mask_folder, basename(mask)[:-4]+'.png'), mask_image)
-            # print('INFO:::: Processing image number {} / {}'.format(count, len(images)))
 
     def visualize_coco(self):
         import random
