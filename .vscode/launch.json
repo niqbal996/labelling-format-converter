@@ -8,8 +8,8 @@
             "name": "MAIN",
             "type": "python",
             "request": "launch",
-            "program": "/home/naeem/git/labelling-format-converter/main.py",
-            "args": ["--output", "coco", "--root-folder", "/home/naeem/datasets/maize_syn/"],
+            "program": "./main.py",
+            "args": ["--output", "coco", "--root-folder", "/mnt/d/datasets/2022_GIL_Paper_Dataset_V2"],
             "console": "integratedTerminal",
             "justMyCode": true
         },
@@ -17,9 +17,18 @@
             "name": "toCOCO",
             "type": "python",
             "request": "launch",
-            "program": "/home/naeem/git/labelling-format-converter/Scientific-Project/utils/convert2COCO.py",
+            "program": "./Scientific-Project/utils/convert2COCO.py",
             "console": "integratedTerminal",
             "justMyCode": true
-        }
+        },
+        {
+            "name": "COCO Inst. Segmentation",
+            "type": "python",
+            "request": "launch",
+            "program": "./main.py",
+            "args": ["--output", "coco_seg", "--root-folder", "/mnt/d/datasets/sugarbeet_syn_v1"],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
     ]
 }
