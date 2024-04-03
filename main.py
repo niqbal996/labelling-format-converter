@@ -7,6 +7,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--root-folder', type=str, default='/mnt/d/datasets/Corn_syn_dataset/2022_GIL_Paper_Dataset_V2', help='simulation output root folder path')
     parser.add_argument('--output', type=str, default='coco_seg', choices=['yolo', 'coco_seg'], help='output labelling format')
+    parser.add_argument('--visualize', action='store_true', help='Visualize with detectron API')
 
     flags = parser.parse_args()
 
@@ -28,7 +29,8 @@ def main():
         format.save_json(
                         anns_dir=os.path.join(flags.root_folder, 'coco_annotations'),
                         anns_file='instances_train.json')
-    format.visualize_coco()
-    
+        if flags.visualize:
+            format.visualize_coco()
+
 if __name__ == '__main__':
     main()

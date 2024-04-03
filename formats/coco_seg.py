@@ -14,12 +14,6 @@ from skimage import measure
 import imutils 
 from shapely.geometry import Polygon, MultiPolygon
 
-from detectron2.data import MetadataCatalog
-from detectron2.utils.visualizer import Visualizer
-from detectron2.data.catalog import DatasetCatalog
-from detectron2.data.datasets import register_coco_instances
-
-
 class COCO_Instance_segmentation(object):
     def __init__(self, root_path='/media/naeem/T7/datasets/Corn_syn_dataset/',
                  anns_dir=None,
@@ -158,6 +152,11 @@ class COCO_Instance_segmentation(object):
         return all_segmentations, all_boxes, all_areas, all_ids
 
     def show_image(self, img, window_name):
+        from detectron2.data import MetadataCatalog
+        from detectron2.utils.visualizer import Visualizer
+        from detectron2.data.catalog import DatasetCatalog
+        from detectron2.data.datasets import register_coco_instances
+        
         cv2.namedWindow("window_name", cv2.WINDOW_NORMAL)
         cv2.moveWindow("window_name", 40,30)
         cv2.resizeWindow("window_name", 1200, 1400)
