@@ -1,19 +1,15 @@
 import os
 import glob
 import argparse
+from datumaro.components.dataset import Dataset
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--root-folder', type=str, default='/mnt/d/datasets/Corn_syn_dataset/2022_GIL_Paper_Dataset_V2', help='simulation output root folder path')
-    parser.add_argument('--output', type=str, default='yolo', choices=['coco', 'yolo', 'coco_seg'], help='output labelling format')
+    parser.add_argument('--output', type=str, default='coco_seg', choices=['yolo', 'coco_seg'], help='output labelling format')
 
     flags = parser.parse_args()
 
-    if flags.output == 'coco':
-        from formats.coco import CoCo_converter
-        format = CoCo_converter(root_path=flags.root_folder, subset=False)
-        format.YOLO2COCO(rootDir=flags.root_folder, split='train_mini.txt')
-        format.read_box_labels()
     if flags.output == 'yolo':
         from formats.yolo import YOLO_converter
         # format1 = YOLO_converter(root_path=flags.root_folder, subset=False, remove_class_id=3)
@@ -24,12 +20,15 @@ def main():
         format.fix_labels()
     if flags.output == 'coco_seg':
         from formats.coco_seg import COCO_Instance_segmentation
-        format = COCO_Instance_segmentation(root_path=flags.root_folder)
-        # format.toCityScape()
+        format = COCO_Instance_segmentation(root_path=flags.root_folder,
+                                            anns_dir=os.path.join(flags.root_folder, 'main_camera_annotations'),
+                                            anns_file='instances_train.json'
+                                            )
         format.toCOCO()
-        format.save_json(anns_dir='/mnt/d/datasets/sugarbeet_syn_v1/coco_annotations',
-                         anns_file='instances_2023_train.json')
-        format.visualize_coco()
-
+        format.save_json(
+                        anns_dir=os.path.join(flags.root_folder, 'coco_annotations'),
+                        anns_file='instances_train.json')
+    format.visualize_coco()
+    
 if __name__ == '__main__':
     main()
