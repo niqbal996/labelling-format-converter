@@ -11,6 +11,7 @@ from os import makedirs
 from glob import glob
 from tqdm import tqdm
 from skimage import measure
+import imutils 
 from shapely.geometry import Polygon, MultiPolygon
 
 from detectron2.data import MetadataCatalog
@@ -21,28 +22,27 @@ from detectron2.data.datasets import register_coco_instances
 
 class COCO_Instance_segmentation(object):
     def __init__(self, root_path='/media/naeem/T7/datasets/Corn_syn_dataset/',
+                 anns_dir=None,
+                 anns_file=None,
                  subset=False):
         self.root_path = root_path
+        self.anns_dir = anns_dir
+        self.anns_file = anns_file
         self.subset = subset
         self.boxes = None
-        # self.image_root = join(self.root_path, 'main_camera', 'rect')
-        # self.source_folder = join(self.root_path, 'main_camera_annotations', 'instance_segmentation')
-        # # Note! need semantic segmentation to get the class label in a specified pixel area by the instance segmentation mask. 
-        # self.source_seg_folder = join(self.root_path, 'main_camera_annotations', 'semantic_segmentation')
-        # self.source_boxes = join(self.root_path, 'main_camera_annotations', 'bounding_box')
-        self.image_root = join(self.root_path, 'images')
-        self.source_folder = join(self.root_path, 'annotations', 'instance_seg')
-        # Note! need semantic segmentation to get the class label in a specified pixel area by the instance segmentation mask. 
-        self.source_seg_folder = join(self.root_path, 'annotations', 'semantic_seg')
-        self.source_boxes = join(self.root_path, 'annotations', 'bbx')
+        self.image_root = join(self.root_path, 'main_camera', 'rect')
+        self.source_folder = join(self.root_path, 'main_camera_annotations', 'instance_segmentation')
+        # NOTE need semantic segmentation to get the class label in a specified pixel area by the instance segmentation mask. 
+        self.source_seg_folder = join(self.root_path, 'main_camera_annotations', 'semantic_segmentation')
+        self.source_boxes = join(self.root_path, 'main_camera_annotations', 'bounding_box')
         self.new_Anns = {}
         self.new_Anns['info'] = {
-                        'description': f'Synthetic Beets dataset v2.0',
+                        'description': f'Synthetic Sugarbeets dataset v2.0',
                         'url': 'None',
                         'version': '1.0',
-                        'year': '2023',
-                        'contributor': 'AGRIGAIA',
-                        'date_created': '9th June,2023'}
+                        'year': '2024',
+                        'contributor': 'LALWECO',
+                        'date_created': '03 April,2024'}
 
         self.new_Anns['licenses'] = [{'url': 'None', 'id': 1, 'name': 'None'}]
 
@@ -58,7 +58,7 @@ class COCO_Instance_segmentation(object):
         file = join(self.source_folder, '{}.npz'.format(basename(image_filename)[:-4]))
         seg_file = join(self.source_seg_folder, '{}.npz'.format(basename(image_filename)[:-4]))
         # tmp = cv2.imread(image_filename)
-        label_image = np.zeros((self.h, self.w), dtype=np.uint16)
+        label_image = np.zeros((self.h, self.w), dtype=np.uint8)
         # assumes max objects per image = 1000
         labels = [i  for i in reversed(range(5000))]
         kernel = np.ones((2,2), np.uint8)
@@ -107,32 +107,52 @@ class COCO_Instance_segmentation(object):
                 semantic_id = int(val[ind])  # class ID of current instance 
                 instance_mask[np.where(instance_segmentation_mask==id)] = instance_segmentation_mask[np.where(instance_segmentation_mask==id)]
                 instance_mask[np.where(instance_mask > 0)] = 1
+                idxs = np.where(instance_mask > 0)
+                min_x, min_y, max_x, max_y = min(idxs[1]), min(idxs[0]), max(idxs[1]), max(idxs[0])
+                x,y,w,h = min_x, min_y, max_x - min_x, max_y - min_y
+                area = w*h 
                 # fill small holes in masks 
                 dilated_img = cv2.dilate(instance_mask, kernel, iterations=1) * 255
                 dilated_img = dilated_img.astype(np.uint8)
                 # contours, _ = cv2.findContours(instance_segmentation_mask.astype(np.int32), cv2.RETR_FLOODFILL, cv2.CHAIN_APPROX_SIMPLE)
-                contours, _ = cv2.findContours(dilated_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                contours = np.vstack(contours)              # TODO better contour merging. This one leaves artifacts. 
-                approx = cv2.approxPolyDP(contours, 0.002 * cv2.arcLength(contours, True), True).astype(np.int32)
+                contours = cv2.findContours(dilated_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                contours = imutils.grab_contours(contours)
+                contour = max(contours, key=cv2.contourArea)
+                peri = cv2.arcLength(contour, True)
+                approx = cv2.approxPolyDP(contour, 0.002 * peri, True)
+                # contours = np.vstack(contours)              # TODO better contour merging. This one leaves artifacts. 
+                # approx = cv2.approxPolyDP(contours, 0.002 * cv2.arcLength(tuple(contours), True), True).astype(np.int32)
                 # approx = cv2.approxPolyDP(contours[0], 0.002 * cv2.arcLength(contours[0], True), True).astype(float)
-                for cnt in contours:
-                    segmentation = []
-                    for point in range(approx.shape[0]):
-                        segmentation.append(approx[point, 0, 0])
-                        segmentation.append(approx[point, 0, 1])
-                x,y,w,h = cv2.boundingRect(approx.astype(int))
-                cv2.rectangle(label_image_color,(x,y),(x+w,y+h),(0,255,0),2)
-                cv2.drawContours(label_image_color, approx, -1, (0,255, 0), 3)
-                area = w*h
-                all_segmentations.append(segmentation)
-                all_boxes.append([x,y,w,h])
-                all_areas.append(area)
-                all_ids.append(semantic_id)
-                # self.show_image(dilated_img, 'instance mask')
-                label_image_color = np.repeat(label_image[:, :, np.newaxis], 3, axis=2)
-                # flush old values
-                instance_mask = np.zeros((self.h, self.w), dtype=np.uint16)
-                id_mask = np.zeros((self.h, self.w), dtype=np.uint8)
+                # for cnt in contours:
+                segmentation = []
+                # assumes there is only a single contour in the mask image
+                for point in range(approx.shape[0]):
+                    segmentation.append(approx[point, 0, 0])
+                    segmentation.append(approx[point, 0, 1])
+                # x,y,w,h = cv2.boundingRect(approx.astype(int))      # x_min, y_min, width, height
+                # cv2.rectangle(label_image_color,(x,y),(x+w,y+h),(255,255,255),2)
+                if area < 50:
+                    instance_mask = np.zeros((self.h, self.w), dtype=np.uint16)
+                    id_mask = np.zeros((self.h, self.w), dtype=np.uint8)
+                    continue
+                else:
+                    # print(area)
+                    # tmp = instance_mask.copy().astype(np.uint8)*255
+                    # tmp_colored = np.zeros((tmp.shape[0], tmp.shape[1], 3), dtype=np.uint8)
+                    # tmp_colored[:, :, 0] = tmp
+                    # tmp_colored[:, :, 1] = tmp
+                    # tmp_colored[:, :, 2] = tmp
+                    # cv2.rectangle(tmp_colored,(x,y),(x+w,y+h),(0,255,0),1)
+                    # cv2.drawContours(tmp_colored, contours, -1, (0,255,0), 1)
+                    # cv2.imshow('figure', tmp_colored)
+                    # cv2.waitKey(0)
+                    all_segmentations.append(segmentation)
+                    all_boxes.append([x,y,w,h])
+                    all_areas.append(area)
+                    all_ids.append(semantic_id)
+                    # flush old values
+                    instance_mask = np.zeros((self.h, self.w), dtype=np.uint16)
+                    id_mask = np.zeros((self.h, self.w), dtype=np.uint8)
         # self.show_image(label_image_color, 'full_mask')
 
         return all_segmentations, all_boxes, all_areas, all_ids
@@ -188,7 +208,7 @@ class COCO_Instance_segmentation(object):
         self.anns_file = anns_file
         makedirs(anns_dir, exist_ok=True)
         with open(join(anns_dir, anns_file), 'w+') as f:
-            json.dump(self.new_Anns, f, default=str)
+            json.dump(self.new_Anns, f, default=float, indent=4)
 
     def toCityScape(self):
         mask_folder = join(self.source_seg_folder, 'gtFine')
@@ -216,13 +236,14 @@ class COCO_Instance_segmentation(object):
         import random
         register_coco_instances("SugarbeetSyn23", {}, join(self.anns_dir, self.anns_file), self.image_root)
         my_dataset_metadata = MetadataCatalog.get("SugarbeetSyn23")
+        # my_dataset_metadata.thing_classes = ['sugarbeets']
         dataset_dicts = DatasetCatalog.get("SugarbeetSyn23")
 
         for d in dataset_dicts:
             img = cv2.imread(d["file_name"])
-            visualizer = Visualizer(img[:, :, ::-1], metadata=my_dataset_metadata, scale=0.5)
+            visualizer = Visualizer(img[:, :, ::-1], metadata=my_dataset_metadata, scale=1.0)
             vis = visualizer.draw_dataset_dict(d)
-            cv2.imshow('image', vis.get_image()[:, :, ::-1])
+            cv2.imshow('{}'.format(d["file_name"]), vis.get_image()[:, :, ::-1])
             cv2.waitKey()
             cv2.destroyAllWindows()
                 
