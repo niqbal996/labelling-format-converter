@@ -5,11 +5,23 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Syclops2COCOStuff",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "tools/syclops2cocostuff.py",
+            "console": "integratedTerminal"
+        },
+        {
             "name": "MAIN",
             "type": "python",
             "request": "launch",
             "program": "./main.py",
-            "args": ["--output", "coco", "--root-folder", "/mnt/d/datasets/2022_GIL_Paper_Dataset_V2"],
+            "args": [
+                "--output",
+                "coco",
+                "--root-folder",
+                "/mnt/d/datasets/2022_GIL_Paper_Dataset_V2"
+            ],
             "console": "integratedTerminal",
             "justMyCode": true
         },
@@ -26,7 +38,36 @@
             "type": "python",
             "request": "launch",
             "program": "./main.py",
-            "args": ["--output", "coco_seg", "--root-folder", "/mnt/d/datasets/sugarbeet_syn_v1"],
+            "args": [
+                "--output",
+                "coco_seg",
+                "--root-folder",
+                "/mnt/d/datasets/sugarbeet_syn_v1/2024_03_28_17_11_15"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Modify json",
+            "type": "python",
+            "request": "launch",
+            "program": "modify_json.py",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Analyze_pheno",
+            "type": "python",
+            "request": "launch",
+            "program": "analyze_phenobench.py",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "COCO2Datumaro",
+            "type": "python",
+            "request": "launch",
+            "program": "tools/coco2datumaro.py",
             "console": "integratedTerminal",
             "justMyCode": false
         },
