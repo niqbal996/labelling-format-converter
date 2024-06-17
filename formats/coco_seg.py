@@ -70,6 +70,8 @@ class COCO_Instance_segmentation(object):
         # # set 0 as the background index
         # instance_segmentation_mask[np.where(instance_segmentation_mask==background_value)] = 0
         # instance_values = np.delete(instance_values, np.argmax(counts))
+        if instance_ids.min() == 0:
+            instance_ids = instance_ids[1:]
         instance_count = len(instance_ids)
         # color_dict = {}
         # r = np.array([randint(0, 255) for p in range(0, instance_count)])
@@ -152,11 +154,6 @@ class COCO_Instance_segmentation(object):
         return all_segmentations, all_boxes, all_areas, all_ids
 
     def show_image(self, img, window_name):
-        from detectron2.data import MetadataCatalog
-        from detectron2.utils.visualizer import Visualizer
-        from detectron2.data.catalog import DatasetCatalog
-        from detectron2.data.datasets import register_coco_instances
-        
         cv2.namedWindow("window_name", cv2.WINDOW_NORMAL)
         cv2.moveWindow("window_name", 40,30)
         cv2.resizeWindow("window_name", 1200, 1400)
@@ -167,7 +164,7 @@ class COCO_Instance_segmentation(object):
     def toCOCO(self):
         annsId = 0
         cat_id = 1
-        images = glob(join(self.image_root, '*.png'))
+        images = sorted(glob(join(self.image_root, '*.png')))
         tmp_image = cv2.imread(images[0])
         self.h, self.w = tmp_image.shape[0], tmp_image.shape[1]
         if len(images) != 0:
@@ -232,10 +229,13 @@ class COCO_Instance_segmentation(object):
             cv2.imwrite(join(mask_folder, basename(mask)[:-4]+'.png'), mask_image)
 
     def visualize_coco(self):
-        import random
+        import os
+        from detectron2.data import MetadataCatalog
+        from detectron2.utils.visualizer import Visualizer
+        from detectron2.data.catalog import DatasetCatalog
+        from detectron2.data.datasets import register_coco_instances
         register_coco_instances("SugarbeetSyn23", {}, join(self.anns_dir, self.anns_file), self.image_root)
         my_dataset_metadata = MetadataCatalog.get("SugarbeetSyn23")
-        # my_dataset_metadata.thing_classes = ['sugarbeets']
         dataset_dicts = DatasetCatalog.get("SugarbeetSyn23")
 
         for d in dataset_dicts:
