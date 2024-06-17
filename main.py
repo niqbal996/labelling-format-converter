@@ -1,7 +1,7 @@
 import os
 import glob
 import argparse
-from datumaro.components.dataset import Dataset
+# from datumaro.components.dataset import Dataset
 
 def main():
     parser = argparse.ArgumentParser()
