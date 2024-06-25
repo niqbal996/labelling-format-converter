@@ -48,108 +48,47 @@ class COCO_Instance_segmentation(object):
         self.new_Anns['annotations'] = []    
 
     def mask2polygons(self, image_filename):
-        # Get the source label file name
-        file = join(self.source_folder, '{}.npz'.format(basename(image_filename)[:-4]))
-        seg_file = join(self.source_seg_folder, '{}.npz'.format(basename(image_filename)[:-4]))
-        # tmp = cv2.imread(image_filename)
-        label_image = np.zeros((self.h, self.w), dtype=np.uint8)
-        # assumes max objects per image = 1000
-        labels = [i  for i in reversed(range(5000))]
-        kernel = np.ones((2,2), np.uint8)
-        numpy_data = np.load(file)
-        seg_data = np.load(seg_file)
-        instance_segmentation_mask = np.array(numpy_data.f.array).astype(np.uint16)
-        semantic_segmentation_mask = np.array(seg_data.f.array)
-        class_ids, _ = np.unique(semantic_segmentation_mask, return_counts=True)         # unique classes
-        instance_segmentation_mask += 1     # start indices from 1 
-        instance_ids, counts = np.unique(instance_segmentation_mask, return_counts=True) # unique instances
+        file = join(self.source_folder, f'{basename(image_filename)[:-4]}.npz')
+        seg_file = join(self.source_seg_folder, f'{basename(image_filename)[:-4]}.npz')
+        
+        instance_segmentation_mask = np.load(file)['array'].astype(np.uint16) + 1
+        semantic_segmentation_mask = np.load(seg_file)['array']
+        
+        instance_ids = np.unique(instance_segmentation_mask)
+        instance_ids = instance_ids[instance_ids != 0]
 
-        # # background value
-        # background_value = instance_values[np.argmax(counts)]
-        # instance_segmentation_mask[np.where(instance_segmentation_mask==0)] = len(instance_values)+1
-        # # set 0 as the background index
-        # instance_segmentation_mask[np.where(instance_segmentation_mask==background_value)] = 0
-        # instance_values = np.delete(instance_values, np.argmax(counts))
-        if instance_ids.min() == 0:
-            instance_ids = instance_ids[1:]
-        instance_count = len(instance_ids)
-        # color_dict = {}
-        # r = np.array([randint(0, 255) for p in range(0, instance_count)])
-        # g = np.array([randint(0, 255) for p in range(0, instance_count)])
-        # b = np.array([randint(0, 255) for p in range(0, instance_count)])
-        # for idx in range(instance_count):
-        #     color_dict[idx] = [r[idx], g[idx], b[idx]]
-        # Since we can only put 
-        assert len(labels) > instance_count
-        # for value in instance_values:
-        #     idx = np.where(instance_segmentation_mask == value)
-        #     label_image[idx] = labels[instance_count]
-        #     instance_count -= 1
-        label_image_color = np.repeat(label_image[:, :, np.newaxis], 3, axis=2)
-        all_segmentations = []
-        all_boxes = []
-        all_areas = []
-        all_ids = []    # class IDs
-        id_mask = np.zeros((self.h, self.w), dtype=np.uint8)
-        instance_mask = np.zeros((self.h, self.w), dtype=np.uint16)
+        all_segmentations, all_boxes, all_areas, all_ids = [], [], [], []
+        kernel = np.ones((2,2), np.uint8)
+
         for id in instance_ids:
-            # Fetch semantic ID
-            id_mask[np.where(instance_segmentation_mask==id)] = semantic_segmentation_mask[np.where(instance_segmentation_mask==id)]
-            val, counts = np.unique(id_mask, return_counts=True)
-            ind = np.argmin(counts) # minimum value should be the index of the class ID
-            if ind == 0:
-                pass
-            else:
-                semantic_id = int(val[ind])  # class ID of current instance 
-                instance_mask[np.where(instance_segmentation_mask==id)] = instance_segmentation_mask[np.where(instance_segmentation_mask==id)]
-                instance_mask[np.where(instance_mask > 0)] = 1
-                idxs = np.where(instance_mask > 0)
-                min_x, min_y, max_x, max_y = min(idxs[1]), min(idxs[0]), max(idxs[1]), max(idxs[0])
-                x,y,w,h = min_x, min_y, max_x - min_x, max_y - min_y
-                area = w*h 
-                # fill small holes in masks 
-                dilated_img = cv2.dilate(instance_mask, kernel, iterations=1) * 255
-                dilated_img = dilated_img.astype(np.uint8)
-                # contours, _ = cv2.findContours(instance_segmentation_mask.astype(np.int32), cv2.RETR_FLOODFILL, cv2.CHAIN_APPROX_SIMPLE)
-                contours = cv2.findContours(dilated_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                contours = imutils.grab_contours(contours)
-                contour = max(contours, key=cv2.contourArea)
-                peri = cv2.arcLength(contour, True)
-                approx = cv2.approxPolyDP(contour, 0.002 * peri, True)
-                # contours = np.vstack(contours)              # TODO better contour merging. This one leaves artifacts. 
-                # approx = cv2.approxPolyDP(contours, 0.002 * cv2.arcLength(tuple(contours), True), True).astype(np.int32)
-                # approx = cv2.approxPolyDP(contours[0], 0.002 * cv2.arcLength(contours[0], True), True).astype(float)
-                # for cnt in contours:
-                segmentation = []
-                # assumes there is only a single contour in the mask image
-                for point in range(approx.shape[0]):
-                    segmentation.append(approx[point, 0, 0])
-                    segmentation.append(approx[point, 0, 1])
-                # x,y,w,h = cv2.boundingRect(approx.astype(int))      # x_min, y_min, width, height
-                # cv2.rectangle(label_image_color,(x,y),(x+w,y+h),(255,255,255),2)
-                if area < 50:
-                    instance_mask = np.zeros((self.h, self.w), dtype=np.uint16)
-                    id_mask = np.zeros((self.h, self.w), dtype=np.uint8)
-                    continue
-                else:
-                    # print(area)
-                    # tmp = instance_mask.copy().astype(np.uint8)*255
-                    # tmp_colored = np.zeros((tmp.shape[0], tmp.shape[1], 3), dtype=np.uint8)
-                    # tmp_colored[:, :, 0] = tmp
-                    # tmp_colored[:, :, 1] = tmp
-                    # tmp_colored[:, :, 2] = tmp
-                    # cv2.rectangle(tmp_colored,(x,y),(x+w,y+h),(0,255,0),1)
-                    # cv2.drawContours(tmp_colored, contours, -1, (0,255,0), 1)
-                    # cv2.imshow('figure', tmp_colored)
-                    # cv2.waitKey(0)
-                    all_segmentations.append(segmentation)
-                    all_boxes.append([x,y,w,h])
-                    all_areas.append(area)
-                    all_ids.append(semantic_id)
-                    # flush old values
-                    instance_mask = np.zeros((self.h, self.w), dtype=np.uint16)
-                    id_mask = np.zeros((self.h, self.w), dtype=np.uint8)
-        # self.show_image(label_image_color, 'full_mask')
+            instance_mask = (instance_segmentation_mask == id).astype(np.uint8)
+            semantic_id = np.bincount(semantic_segmentation_mask[instance_mask == 1]).argmax()
+            
+            if semantic_id == 0:
+                continue
+
+            dilated_mask = cv2.dilate(instance_mask, kernel, iterations=1)
+            contours = cv2.findContours(dilated_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            contours = imutils.grab_contours(contours)
+            
+            if not contours:
+                continue
+
+            contour = max(contours, key=cv2.contourArea)
+            area = cv2.contourArea(contour)
+            
+            if area < 60:
+                continue
+
+            x, y, w, h = cv2.boundingRect(contour)
+            peri = cv2.arcLength(contour, True)
+            approx = cv2.approxPolyDP(contour, 0.002 * peri, True)
+            segmentation = approx.flatten().tolist()
+
+            all_segmentations.append(segmentation)
+            all_boxes.append([x, y, w, h])
+            all_areas.append(area)
+            all_ids.append(semantic_id)
 
         return all_segmentations, all_boxes, all_areas, all_ids
 
