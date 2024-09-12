@@ -29,7 +29,7 @@ class COCO_Panoptic_segmentation(object):
     def __init__(self, root_path='/media/naeem/T7/datasets/Corn_syn_dataset/',
                  anns_dir=None,
                  output_dir=None,
-                 split='val'):
+                 split='train'):
         self.root_path = root_path
         self.anns_dir = anns_dir
         self.out_dir = output_dir
@@ -75,6 +75,7 @@ class COCO_Panoptic_segmentation(object):
     def process_label_file(args):
         label_file_path, idx, self = args
         numpy_data = np.load(label_file_path)
+        image_id = str(basename(label_file_path)[:-4])
         semantic_mask = np.asarray(Image.open(join(self.source_segmentation_folder, 
                                                 basename(label_file_path)[:-3]+'png')))
         label_array = numpy_data['array'].astype(np.uint16)
@@ -89,10 +90,10 @@ class COCO_Panoptic_segmentation(object):
             semantic_ID = semantic_mask[mask][0]
             semantic_color = id2rgb(semantic_ID)
             pan_format[mask] = semantic_color
-            if semantic_ID == 0:
+            if semantic_ID == 0 and segment_id == background_idx:
                 segmInfo.append({"id": self.segment_counter,
                                 "category_id": int(3),
-                                "area": np.sum(mask),
+                                "area": int(np.sum(mask)),
                                 "bbox": [0, 0, 1024, 1024],
                                 "iscrowd": 0})
             else:
@@ -113,15 +114,15 @@ class COCO_Panoptic_segmentation(object):
                                 "iscrowd": 0})
             self.segment_counter += 1
         
-        annotation = {'image_id': idx+1,
-                    'file_name': basename(label_file_path)[:-4]+'_panoptic.png',
+        annotation = {'image_id': image_id,
+                    'file_name': image_id+'_panoptic.png',
                     "segments_info": segmInfo}
         
-        Image.fromarray(pan_format).save(join(self.panoptic_labels, basename(label_file_path)[:-4]+'_panoptic.png'))
+        # Image.fromarray(pan_format).save(join(self.panoptic_labels, basename(label_file_path)[:-4]+'_panoptic.png'))
         mask = semantic_mask == 0
         semantic_new = semantic_mask.copy()
         semantic_new[mask] = 3
-        Image.fromarray(pan_format).save(join(self.semantic_labels, basename(label_file_path)[:-4]+'_semantic.png'))
+        # Image.fromarray(pan_format).save(join(self.semantic_labels, basename(label_file_path)[:-4]+'_semantic.png'))
         
         return annotation
     
@@ -141,14 +142,14 @@ class COCO_Panoptic_segmentation(object):
     def start_processing(self):
         self.new_Anns['images'] = self.images2json()
         self.new_Anns['annotations'] = self.syclops_panoptic2coco_panoptic()
-        self.save_json(anns_dir=self.root_path, anns_file='instances_train.json')
+        self.save_json(anns_dir=self.root_path, anns_file='plants_panoptic_{}.json'.format(self.split))
         
     def save_json(self, anns_dir, anns_file):
         self.anns_dir = anns_dir
         self.anns_file = anns_file
         makedirs(anns_dir, exist_ok=True)
         with open(join(anns_dir, anns_file), 'w+') as f:
-            json.dump(self.new_Anns, f, default=float, indent=4)
+            json.dump(self.new_Anns, f, default=float)
             
     def show_image(self, img, window_name):
         cv2.namedWindow("window_name", cv2.WINDOW_NORMAL)
