@@ -17,6 +17,8 @@ from shapely.geometry import Polygon, MultiPolygon
 from panopticapi.utils import rgb2id, id2rgb
 from PIL import Image
 
+ids = []
+
 def process_image(filepath, idx):
     return {
         "filename": basename(filepath),
@@ -41,7 +43,7 @@ class COCO_Panoptic_segmentation(object):
         self.source_segmentation_folder = join(self.root_path, 'main_camera_annotations', 'semantics')
         self.source_boxes = join(self.root_path, 'main_camera_annotations', 'bounding_box')
         self.panoptic_labels= join(self.root_path, 'plants_panoptic_{}'.format(split))
-        self.semantic_labels= join(self.root_path, 'plants_semseg_{}'.format(split))
+        self.semantic_labels= join(self.root_path, 'plants_panoptic_semseg_{}'.format(split))
         makedirs(self.panoptic_labels, exist_ok=True)
         makedirs(self.semantic_labels, exist_ok=True)
         self.new_Anns = {}
@@ -56,9 +58,9 @@ class COCO_Panoptic_segmentation(object):
         self.new_Anns['licenses'] = [{'url': 'None', 'id': 1, 'name': 'None'}]
 
         self.new_Anns['categories'] = [
-                                {'supercategory': 'plants', 'id': 1, "isthing": 1, 'name': 'sugarbeets', 'color': [111, 74, 0]},
-                                {'supercategory': 'plants', 'id': 2, "isthing": 1,'name': 'weeds', 'color': [230, 150, 140]},
-                                {'supercategory': 'background', 'id': 3, "isthing": 0, 'name': 'soil', 'color': [10, 10, 10]},
+                                {'supercategory': 'background', 'id': 0, "isthing": 0, 'name': 'soil', 'color': [10, 10, 10]},
+                                {'supercategory': 'plants', 'id': 1, "isthing": 1, 'name': 'sugarbeet', 'color': [111, 74, 0]},
+                                {'supercategory': 'plants', 'id': 2, "isthing": 1,'name': 'weed', 'color': [230, 150, 140]},
                                 ]   
         
     def images2json(self):
@@ -72,6 +74,35 @@ class COCO_Panoptic_segmentation(object):
         return images
     
     @staticmethod
+    def normalize_uint16_to_uint8(input_array):
+        """
+        Normalize and scale a uint16 array to uint8.
+        
+        Parameters:
+        input_array (numpy.ndarray): Input array of type uint16
+        
+        Returns:
+        numpy.ndarray: Normalized and scaled array of type uint8
+        """
+        if input_array.dtype != np.uint16:
+            raise ValueError("Input array must be of type uint16")
+        
+        # Ensure the input is a numpy array
+        input_array = np.asarray(input_array)
+        
+        # Find the minimum and maximum values in the input array
+        min_val = np.min(input_array)
+        max_val = np.max(input_array)
+        
+        # Normalize the array to float in range [0, 1]
+        normalized = (input_array - min_val) / (max_val - min_val)
+        
+        # Scale to uint8 range [0, 255] and convert
+        scaled = (normalized * 255).astype(np.uint8)
+        
+        return scaled
+        
+    @staticmethod
     def process_label_file(args):
         label_file_path, idx, self = args
         numpy_data = np.load(label_file_path)
@@ -79,6 +110,8 @@ class COCO_Panoptic_segmentation(object):
         semantic_mask = np.asarray(Image.open(join(self.source_segmentation_folder, 
                                                 basename(label_file_path)[:-3]+'png')))
         label_array = numpy_data['array'].astype(np.uint16)
+        label_array = self.normalize_uint16_to_uint8(label_array)
+        # ids.append(np.unique(label_array)[1:])
         segmentIds, counts = np.unique(label_array, return_counts=True)
         background_idx = segmentIds[counts.argmax()]
         pan_format = np.zeros(
@@ -88,11 +121,11 @@ class COCO_Panoptic_segmentation(object):
         for segment_id in segmentIds:
             mask = label_array == segment_id
             semantic_ID = semantic_mask[mask][0]
-            semantic_color = id2rgb(semantic_ID)
-            pan_format[mask] = semantic_color
+            segment_color = id2rgb(segment_id)
+            pan_format[mask] = segment_color
             if semantic_ID == 0 and segment_id == background_idx:
-                segmInfo.append({"id": self.segment_counter,
-                                "category_id": int(3),
+                segmInfo.append({"id": int(segment_id),
+                                "category_id": int(semantic_ID),
                                 "area": int(np.sum(mask)),
                                 "bbox": [0, 0, 1024, 1024],
                                 "iscrowd": 0})
@@ -107,8 +140,8 @@ class COCO_Panoptic_segmentation(object):
                 y = vert_idx[0]
                 height = vert_idx[-1] - y + 1
                 bbox = [int(x), int(y), int(width), int(height)]
-                segmInfo.append({"id": self.segment_counter,
-                                "category_id": int(semantic_ID) if semantic_ID != 0 else int(3),
+                segmInfo.append({"id": int(segment_id),
+                                "category_id": int(semantic_ID) if semantic_ID != 0 else int(0),
                                 "area": int(area),
                                 "bbox": bbox,
                                 "iscrowd": 0})
@@ -118,11 +151,11 @@ class COCO_Panoptic_segmentation(object):
                     'file_name': image_id+'_panoptic.png',
                     "segments_info": segmInfo}
         
-        # Image.fromarray(pan_format).save(join(self.panoptic_labels, basename(label_file_path)[:-4]+'_panoptic.png'))
-        mask = semantic_mask == 0
-        semantic_new = semantic_mask.copy()
-        semantic_new[mask] = 3
-        # Image.fromarray(pan_format).save(join(self.semantic_labels, basename(label_file_path)[:-4]+'_semantic.png'))
+        Image.fromarray(pan_format).save(join(self.panoptic_labels, basename(label_file_path)[:-4]+'_panoptic.png'))
+        # mask = semantic_mask == 0
+        # semantic_new = semantic_mask.copy()
+        # semantic_new[mask] = 3
+        Image.fromarray(semantic_mask).save(join(self.semantic_labels, basename(label_file_path)[:-4]+'_semantic.png'))
         
         return annotation
     
