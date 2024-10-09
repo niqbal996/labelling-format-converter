@@ -111,7 +111,6 @@ class COCO_Panoptic_segmentation(object):
                                                 basename(label_file_path)[:-3]+'png')))
         label_array = numpy_data['array'].astype(np.uint16)
         label_array = self.normalize_uint16_to_uint8(label_array)
-        # ids.append(np.unique(label_array)[1:])
         segmentIds, counts = np.unique(label_array, return_counts=True)
         background_idx = segmentIds[counts.argmax()]
         pan_format = np.zeros(
@@ -152,11 +151,7 @@ class COCO_Panoptic_segmentation(object):
                     "segments_info": segmInfo}
         
         Image.fromarray(pan_format).save(join(self.panoptic_labels, basename(label_file_path)[:-4]+'_panoptic.png'))
-        # mask = semantic_mask == 0
-        # semantic_new = semantic_mask.copy()
-        # semantic_new[mask] = 3
         Image.fromarray(semantic_mask).save(join(self.semantic_labels, basename(label_file_path)[:-4]+'_semantic.png'))
-        
         return annotation
     
     def syclops_panoptic2coco_panoptic(self):
