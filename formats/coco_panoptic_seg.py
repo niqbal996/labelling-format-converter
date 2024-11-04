@@ -24,13 +24,14 @@ def process_image(filepath, idx):
         "filename": basename(filepath),
         "height": 1024,
         "width": 1024,
-        "id": idx + 1,
+        "id": str(basename(filepath[:-4])),
     }
 
 class COCO_Panoptic_segmentation(object):
     def __init__(self, root_path='/media/naeem/T7/datasets/Corn_syn_dataset/',
                  anns_dir=None,
                  output_dir=None,
+                 subset_size=10, 
                  split='train'):
         self.root_path = root_path
         self.anns_dir = anns_dir
@@ -38,6 +39,7 @@ class COCO_Panoptic_segmentation(object):
         self.split = split
         self.boxes = None
         self.segment_counter = 0
+        self.subset_size = subset_size
         self.image_root = join(self.root_path, 'main_camera', 'rect')
         self.source_instance_segmentation = join(self.root_path, 'main_camera_annotations', 'instance_segmentation')
         self.source_segmentation_folder = join(self.root_path, 'main_camera_annotations', 'semantics')
@@ -64,7 +66,10 @@ class COCO_Panoptic_segmentation(object):
                                 ]   
         
     def images2json(self):
-        image_files = sorted(glob(join(self.image_root, '*.png')))
+        if self.subset_size != 0:
+            image_files = sorted(glob(join(self.image_root, '*.png')))[0:self.subset_size]
+        else:
+            image_files = sorted(glob(join(self.image_root, '*.png')))
         with concurrent.futures.ThreadPoolExecutor() as executor:
             # Create a list of future objects
             futures = [executor.submit(process_image, filepath, idx) 
@@ -123,7 +128,10 @@ class COCO_Panoptic_segmentation(object):
             segment_color = id2rgb(segment_id)
             pan_format[mask] = segment_color
             if semantic_ID == 0 and segment_id == background_idx:
-                segmInfo.append({"id": int(segment_id),
+                # black color for background in both semantic and panoptic masks
+                segment_color = [0, 0, 0]
+                pan_format[mask] = segment_color
+                segmInfo.append({"id": int(0),
                                 "category_id": int(semantic_ID),
                                 "area": int(np.sum(mask)),
                                 "bbox": [0, 0, 1024, 1024],
@@ -155,7 +163,10 @@ class COCO_Panoptic_segmentation(object):
         return annotation
     
     def syclops_panoptic2coco_panoptic(self):
-        panoptic_syclops_labels = sorted(glob(join(self.source_instance_segmentation, '*.npz')))
+        if self.subset_size != 0:
+            panoptic_syclops_labels = sorted(glob(join(self.source_instance_segmentation, '*.npz')))[0:self.subset_size]
+        else:
+            panoptic_syclops_labels = sorted(glob(join(self.source_instance_segmentation, '*.npz')))
     
         with concurrent.futures.ThreadPoolExecutor() as executor:
             futures = [executor.submit(self.process_label_file, (label_file_path, idx, self)) 

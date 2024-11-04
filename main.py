@@ -36,6 +36,7 @@ def main():
         format = COCO_Panoptic_segmentation(root_path=flags.root_folder,
                                             anns_dir=os.path.join(flags.root_folder, 'main_camera_annotations'),
                                             output_dir=flags.root_folder,
+                                            subset_size=1000,
                                             )
         format.start_processing()
 
