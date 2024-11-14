@@ -46,6 +46,7 @@ class COCO_Panoptic_segmentation(object):
         self.source_boxes = join(self.root_path, 'main_camera_annotations', 'bounding_box')
         self.panoptic_labels= join(self.root_path, 'plants_panoptic_{}'.format(split))
         self.semantic_labels= join(self.root_path, 'plants_panoptic_semseg_{}'.format(split))
+        self.background_category_id = 3
         makedirs(self.panoptic_labels, exist_ok=True)
         makedirs(self.semantic_labels, exist_ok=True)
         self.new_Anns = {}
@@ -60,7 +61,7 @@ class COCO_Panoptic_segmentation(object):
         self.new_Anns['licenses'] = [{'url': 'None', 'id': 1, 'name': 'None'}]
 
         self.new_Anns['categories'] = [
-                                {'supercategory': 'background', 'id': 0, "isthing": 0, 'name': 'soil', 'color': [10, 10, 10]},
+                                {'supercategory': 'background', 'id': 3, "isthing": 0, 'name': 'soil', 'color': [10, 10, 10]},
                                 {'supercategory': 'plants', 'id': 1, "isthing": 1, 'name': 'sugarbeet', 'color': [111, 74, 0]},
                                 {'supercategory': 'plants', 'id': 2, "isthing": 1,'name': 'weed', 'color': [230, 150, 140]},
                                 ]   
@@ -132,7 +133,7 @@ class COCO_Panoptic_segmentation(object):
                 segment_color = [0, 0, 0]
                 pan_format[mask] = segment_color
                 segmInfo.append({"id": int(0),
-                                "category_id": int(semantic_ID),
+                                "category_id": int(self.background_category_id),
                                 "area": int(np.sum(mask)),
                                 "bbox": [0, 0, 1024, 1024],
                                 "iscrowd": 0})
@@ -147,8 +148,8 @@ class COCO_Panoptic_segmentation(object):
                 y = vert_idx[0]
                 height = vert_idx[-1] - y + 1
                 bbox = [int(x), int(y), int(width), int(height)]
-                segmInfo.append({"id": int(segment_id),
-                                "category_id": int(semantic_ID) if semantic_ID != 0 else int(0),
+                segmInfo.append({"id": int(segment_id) if segment_id != 0 else int(1),
+                                "category_id": int(semantic_ID),
                                 "area": int(area),
                                 "bbox": bbox,
                                 "iscrowd": 0})
@@ -159,6 +160,10 @@ class COCO_Panoptic_segmentation(object):
                     "segments_info": segmInfo}
         
         Image.fromarray(pan_format).save(join(self.panoptic_labels, basename(label_file_path)[:-4]+'_panoptic.png'))
+        # Change background to 3 in semantic mask
+        mask = semantic_mask == 0
+        semantic_new = semantic_mask.copy()
+        semantic_new[mask] = self.background_category_id
         Image.fromarray(semantic_mask).save(join(self.semantic_labels, basename(label_file_path)[:-4]+'_semantic.png'))
         return annotation
     
@@ -181,7 +186,7 @@ class COCO_Panoptic_segmentation(object):
     def start_processing(self):
         self.new_Anns['images'] = self.images2json()
         self.new_Anns['annotations'] = self.syclops_panoptic2coco_panoptic()
-        self.save_json(anns_dir=self.root_path, anns_file='plants_panoptic_{}.json'.format(self.split))
+        self.save_json(anns_dir=self.root_path, anns_file='plants_panoptic_{}_{}.json'.format(self.split, self.subset_size))
         
     def save_json(self, anns_dir, anns_file):
         self.anns_dir = anns_dir
